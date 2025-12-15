@@ -1,0 +1,123 @@
+/** @import must precede all other statements */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /**
+   * Tailwind CSS theme
+   * tailwind.config.ts expects the following color variables to be expressed as HSL values.
+   */
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 15 100% 5%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 15 100% 5%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 15 100% 5%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 198 93% 60%;
+    --secondary-foreground: 15 100% 5%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 270 100% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221 83% 53%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 198 93% 60%;
+    --sidebar-accent-foreground: 15 100% 5%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 221 83% 53%;
+  }
+
+  .dark {
+    --background: 15 35% 8%;
+    --foreground: 0 0% 98%;
+
+    --card: 15 25% 12%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 15 25% 12%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 221 100% 65%;
+    --primary-foreground: 15 100% 5%;
+
+    --secondary: 198 100% 50%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 270 100% 60%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 221 100% 65%;
+
+    --sidebar-background: 15 30% 10%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 221 100% 65%;
+    --sidebar-primary-foreground: 15 100% 5%;
+    --sidebar-accent: 198 100% 50%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 15 30% 20%;
+    --sidebar-ring: 221 100% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  :where(p, span, li, h1, h2, h3, h4, h5, h6, a, button, label, td, th) {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  pre,
+  code {
+    overflow-x: auto;
+    white-space: pre;
+  }
+}
+
+@layer components {
+  .gate-gradient {
+    @apply bg-gradient-to-br from-primary/10 via-secondary/10 to-accent/10;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-lg hover:shadow-primary/20;
+  }
+}
