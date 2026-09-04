@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PortalLayout } from "@/components/layout/PortalLayout";
 import { getAuth, clearAuth } from "@/lib/auth";
+import { listUsers, listDevices, listGuestPasses } from "@/lib/backend";
 import {
   ArrowLeft,
   BarChart3,
@@ -12,10 +13,12 @@ import {
   AlertCircle,
   TrendingUp,
   Download,
+  Shield,
+  Tag,
 } from "lucide-react";
 
 interface ReportData {
-  totalStudents: number;
+  totalEmployees: number;
   totalPCs: number;
   activePCs: number;
   replacedPCs: number;
@@ -27,8 +30,8 @@ interface ReportData {
 }
 
 interface StudentPCCount {
-  studentName: string;
-  rollNumber: string;
+  employeeName: string;
+  employeeId: string;
   pcCount: number;
   status: string;
 }
@@ -38,6 +41,7 @@ export default function DepartmentReports() {
   const auth = getAuth("department");
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [studentPCCounts, setStudentPCCounts] = useState<StudentPCCount[]>([]);
+  const [guestPassList, setGuestPassList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -52,72 +56,48 @@ export default function DepartmentReports() {
   const loadReportData = async () => {
     setIsLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      const [userResponse, deviceResponse, guestResponse] = await Promise.all([
+        listUsers(),
+        listDevices(),
+        listGuestPasses().catch(() => []),
+      ]);
+      const users = Array.isArray(userResponse) ? userResponse : userResponse.results || [];
+      const devices = Array.isArray(deviceResponse) ? deviceResponse : deviceResponse.results || [];
+      const guestPasses = Array.isArray(guestResponse) ? guestResponse : guestResponse.results || [];
+      const employees = users.filter((user: any) => user.role === "EMPLOYEE");
 
-      // Simulated report data
+      const employeeRows = employees.map((user: any) => {
+        const userDevices = devices.filter((device: any) => {
+          const ownerId = typeof device.owner === "object" ? device.owner?.id : device.owner;
+          return String(ownerId) === String(user.id);
+        });
+
+        const hasFlagged = userDevices.some((device: any) => device.status === "STOLEN");
+        return {
+          employeeName: `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.username,
+          employeeId: user.username || user.email || "N/A",
+          pcCount: userDevices.length,
+          status: hasFlagged ? "Flagged" : userDevices.length > 0 ? "Active" : "Pending",
+        };
+      });
+
+      const flaggedGuests = guestPasses.filter((g: any) => g.status === "STOLEN_FLAG" || g.flagged_as_stolen);
+      const totalFlagged = devices.filter((device: any) => device.status === "STOLEN").length + flaggedGuests.length;
+
       setReportData({
-        totalStudents: 87,
-        totalPCs: 92,
-        activePCs: 85,
-        replacedPCs: 5,
-        blockedPCs: 2,
-        registrationsThisMonth: 12,
-        reportsThisMonth: 2,
-        averagePCsPerStudent: 1.06,
+        totalEmployees: employees.length,
+        totalPCs: devices.length + guestPasses.length,
+        activePCs: devices.filter((device: any) => device.status !== "STOLEN").length,
+        replacedPCs: devices.filter((device: any) => device.status === "DECOMMISSIONED").length,
+        blockedPCs: totalFlagged,
+        registrationsThisMonth: devices.length + guestPasses.length,
+        reportsThisMonth: totalFlagged,
+        averagePCsPerStudent: employees.length > 0 ? devices.length / employees.length : 0,
         departmentCode: auth.user.code,
       });
 
-      // Simulated student PC counts
-      setStudentPCCounts([
-        {
-          studentName: "Abeba Tadesse",
-          rollNumber: "BT22B001",
-          pcCount: 1,
-          status: "Active",
-        },
-        {
-          studentName: "Almaz Kebede",
-          rollNumber: "BT22B002",
-          pcCount: 1,
-          status: "Active",
-        },
-        {
-          studentName: "Yohannes Desai",
-          rollNumber: "BT22B003",
-          pcCount: 0,
-          status: "Pending",
-        },
-        {
-          studentName: "Selam Haile",
-          rollNumber: "BT22B004",
-          pcCount: 2,
-          status: "Active",
-        },
-        {
-          studentName: "Tewodros Bekele",
-          rollNumber: "BT22B005",
-          pcCount: 1,
-          status: "Active",
-        },
-        {
-          studentName: "Hirut Abebe",
-          rollNumber: "BT22B006",
-          pcCount: 1,
-          status: "Active",
-        },
-        {
-          studentName: "Konjit Tekle",
-          rollNumber: "BT22B007",
-          pcCount: 0,
-          status: "Pending",
-        },
-        {
-          studentName: "Dawit Tesfaye",
-          rollNumber: "BT22B008",
-          pcCount: 1,
-          status: "Active",
-        },
-      ]);
+      setStudentPCCounts(employeeRows);
+      setGuestPassList(guestPasses);
     } catch (error) {
       console.error("Failed to load report data:", error);
     } finally {
@@ -186,8 +166,8 @@ export default function DepartmentReports() {
             <Card className="p-6 rounded-lg border-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Total Students</p>
-                  <p className="text-3xl font-bold">{reportData.totalStudents}</p>
+                  <p className="text-sm text-muted-foreground mb-1">Total Employees</p>
+                  <p className="text-3xl font-bold">{reportData.totalEmployees}</p>
                 </div>
                 <Users className="w-10 h-10 text-primary opacity-50" />
               </div>
@@ -218,7 +198,7 @@ export default function DepartmentReports() {
             <Card className="p-6 rounded-lg border-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Avg PCs/Student</p>
+                  <p className="text-sm text-muted-foreground mb-1">Avg PCs/Employee</p>
                   <p className="text-3xl font-bold">
                     {reportData.averagePCsPerStudent.toFixed(2)}
                   </p>
@@ -240,7 +220,7 @@ export default function DepartmentReports() {
                   {reportData.activePCs}
                 </p>
                 <p className="text-xs text-muted-foreground mt-2">
-                  {((reportData.activePCs / reportData.totalPCs) * 100).toFixed(1)}%
+                  {reportData.totalPCs > 0 ? ((reportData.activePCs / reportData.totalPCs) * 100).toFixed(1) : "0.0"}%
                 </p>
               </div>
 
@@ -250,7 +230,7 @@ export default function DepartmentReports() {
                   {reportData.replacedPCs}
                 </p>
                 <p className="text-xs text-muted-foreground mt-2">
-                  {((reportData.replacedPCs / reportData.totalPCs) * 100).toFixed(1)}%
+                  {reportData.totalPCs > 0 ? ((reportData.replacedPCs / reportData.totalPCs) * 100).toFixed(1) : "0.0"}%
                 </p>
               </div>
 
@@ -260,7 +240,7 @@ export default function DepartmentReports() {
                   {reportData.blockedPCs}
                 </p>
                 <p className="text-xs text-muted-foreground mt-2">
-                  {((reportData.blockedPCs / reportData.totalPCs) * 100).toFixed(1)}%
+                  {reportData.totalPCs > 0 ? ((reportData.blockedPCs / reportData.totalPCs) * 100).toFixed(1) : "0.0"}%
                 </p>
               </div>
             </div>
@@ -290,14 +270,14 @@ export default function DepartmentReports() {
 
         {/* Student PC Registration Status */}
         <div>
-          <h2 className="text-2xl font-bold mb-6">Student PC Registration Status</h2>
+          <h2 className="text-2xl font-bold mb-6">Employee PC Registration Status</h2>
           <Card className="rounded-lg border-2 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="border-b border-border bg-card">
                   <tr>
-                    <th className="text-left p-4 font-semibold">Student Name</th>
-                    <th className="text-left p-4 font-semibold">Roll Number</th>
+                    <th className="text-left p-4 font-semibold">Employee Name</th>
+                    <th className="text-left p-4 font-semibold">Employee ID</th>
                     <th className="text-left p-4 font-semibold">PCs Registered</th>
                     <th className="text-left p-4 font-semibold">Status</th>
                   </tr>
@@ -308,8 +288,8 @@ export default function DepartmentReports() {
                       key={index}
                       className="border-b border-border hover:bg-muted/50 transition-colors"
                     >
-                      <td className="p-4 font-medium">{student.studentName}</td>
-                      <td className="p-4 font-mono text-sm">{student.rollNumber}</td>
+                      <td className="p-4 font-medium">{student.employeeName}</td>
+                      <td className="p-4 font-mono text-sm">{student.employeeId}</td>
                       <td className="p-4">
                         <span className="font-bold text-lg">{student.pcCount}</span>
                       </td>
@@ -318,6 +298,8 @@ export default function DepartmentReports() {
                           className={`px-3 py-1 rounded-full text-xs font-semibold ${
                             student.status === "Active"
                               ? "bg-green-100 text-green-700"
+                              : student.status === "Flagged"
+                                ? "bg-red-100 text-red-700"
                               : "bg-yellow-100 text-yellow-700"
                           }`}
                         >

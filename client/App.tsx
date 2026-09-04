@@ -15,6 +15,8 @@ import DepartmentDashboard from "./pages/DepartmentDashboard";
 import DepartmentPCRegistration from "./pages/DepartmentPCRegistration";
 import DepartmentStudentView from "./pages/DepartmentStudentView";
 import DepartmentReports from "./pages/DepartmentReports";
+import DepartmentCreateGuard from "./pages/DepartmentCreateGuard";
+import SetupPassword from "./pages/SetupPassword";
 
 const queryClient = new QueryClient();
 
@@ -42,8 +44,10 @@ const App = () => (
           <Route path="/dept/login" element={<DepartmentAuth />} />
           <Route path="/dept/dashboard" element={<DepartmentDashboard />} />
           <Route path="/dept/pc-registration" element={<DepartmentPCRegistration />} />
-          <Route path="/dept/student/:studentId" element={<DepartmentStudentView />} />
+          <Route path="/dept/employee/:employeeId" element={<DepartmentStudentView />} />
           <Route path="/dept/reports" element={<DepartmentReports />} />
+          <Route path="/dept/create-guard" element={<DepartmentCreateGuard />} />
+          <Route path="/setup-password" element={<SetupPassword />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

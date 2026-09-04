@@ -3,7 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PortalLayout } from "@/components/layout/PortalLayout";
-import { getAuth, clearAuth, Student, PC } from "@/lib/auth";
+import { getAuth, clearAuth, Student } from "@/lib/auth";
+import { listUsers, listDevices, normalizeImageUrl } from "@/lib/backend";
+import { QRCodeSVG } from "qrcode.react";
 import {
   ArrowLeft,
   Laptop,
@@ -11,22 +13,40 @@ import {
   Trash2,
   Edit,
   Calendar,
+  User,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 
-interface StudentWithPCs extends Student {
-  registeredPCs: PC[];
+interface RegisteredPC {
+  id: string;
+  serialNumber: string;
+  model: string;
+  brand: string;
+  purchaseDate: string;
+  qrCode?: string;
+  qrImage?: string;
+  status: "active" | "blocked" | "replaced";
+  createdAt: string;
+}
+
+interface EmployeeWithPCs extends Student {
+  username: string;
+  role: string;
+  departmentName: string;
+  registeredPCs: RegisteredPC[];
 }
 
 export default function DepartmentStudentView() {
   const navigate = useNavigate();
-  const { studentId } = useParams();
+  const { employeeId } = useParams();
   const auth = getAuth("department");
+  const authCode = auth?.user?.code ?? "";
 
-  const [student, setStudent] = useState<StudentWithPCs | null>(null);
+  const [employee, setEmployee] = useState<EmployeeWithPCs | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [brokenQrImages, setBrokenQrImages] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!auth) {
@@ -34,137 +54,89 @@ export default function DepartmentStudentView() {
       return;
     }
 
-    loadStudentDetails();
-  }, [auth, studentId, navigate]);
+    loadEmployeeDetails();
+  }, [authCode, employeeId, navigate]);
 
-  const loadStudentDetails = async () => {
+  const buildQrFallbackUrl = (pc: RegisteredPC) => {
+    const qrData = pc.qrCode || pc.serialNumber;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(qrData || "N/A")}`;
+  };
+
+  const loadEmployeeDetails = async () => {
     setIsLoading(true);
     setError("");
+    setBrokenQrImages(new Set());
 
     try {
-      // Simulated student data with registered PCs
-      const mockStudents: Record<string, StudentWithPCs> = {
-        STU_BT22B001: {
-          id: "STU_BT22B001",
-          rollNumber: "BT22B001",
-          name: "Abeba Tadesse",
-          email: "bt22b001@student.edu",
-          phone: "+251911234567",
-          departmentId: "CSE",
-          photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=abeba",
-          registeredPCs: [
-            {
-              id: "PC_001",
-              serialNumber: "DELL-XPS-20240115",
-              model: "XPS 13",
-              brand: "Dell",
-              purchaseDate: "2024-01-15",
-              studentId: "STU_BT22B001",
-              qrCode: "STU_BT22B001|DELL-XPS-20240115|CSE",
-              status: "active",
-              createdAt: "2024-01-20",
-            },
-          ],
-        },
-        STU_BT22B002: {
-          id: "STU_BT22B002",
-          rollNumber: "BT22B002",
-          name: "Almaz Kebede",
-          email: "bt22b002@student.edu",
-          phone: "+251922345678",
-          departmentId: "CSE",
-          photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=almaz",
-          registeredPCs: [
-            {
-              id: "PC_002",
-              serialNumber: "HP-PAVILION-20231205",
-              model: "Pavilion 15",
-              brand: "HP",
-              purchaseDate: "2023-12-05",
-              studentId: "STU_BT22B002",
-              qrCode: "STU_BT22B002|HP-PAVILION-20231205|CSE",
-              status: "active",
-              createdAt: "2024-01-18",
-            },
-          ],
-        },
-        STU_BT22B003: {
-          id: "STU_BT22B003",
-          rollNumber: "BT22B003",
-          name: "Yohannes Desai",
-          email: "bt22b003@student.edu",
-          phone: "+251933456789",
-          departmentId: "CSE",
-          photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=yohannes",
-          registeredPCs: [],
-        },
-        STU_BT22B004: {
-          id: "STU_BT22B004",
-          rollNumber: "BT22B004",
-          name: "Selam Haile",
-          email: "bt22b004@student.edu",
-          phone: "+251944567890",
-          departmentId: "CSE",
-          photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=selam",
-          registeredPCs: [
-            {
-              id: "PC_003",
-              serialNumber: "LENOVO-THINKPAD-20240110",
-              model: "ThinkPad E15",
-              brand: "Lenovo",
-              purchaseDate: "2024-01-10",
-              studentId: "STU_BT22B004",
-              qrCode: "STU_BT22B004|LENOVO-THINKPAD-20240110|CSE",
-              status: "active",
-              createdAt: "2024-01-19",
-            },
-            {
-              id: "PC_004",
-              serialNumber: "ASUS-VIVOBOOK-20231120",
-              model: "VivoBook 15",
-              brand: "ASUS",
-              purchaseDate: "2023-11-20",
-              studentId: "STU_BT22B004",
-              qrCode: "STU_BT22B004|ASUS-VIVOBOOK-20231120|CSE",
-              status: "replaced",
-              createdAt: "2024-01-15",
-            },
-          ],
-        },
-        STU_BT22B005: {
-          id: "STU_BT22B005",
-          rollNumber: "BT22B005",
-          name: "Tewodros Bekele",
-          email: "bt22b005@student.edu",
-          phone: "+251955678901",
-          departmentId: "CSE",
-          photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=tewodros",
-          registeredPCs: [
-            {
-              id: "PC_005",
-              serialNumber: "APPLE-MACBOOK-20240102",
-              model: "MacBook Air M2",
-              brand: "Apple",
-              purchaseDate: "2024-01-02",
-              studentId: "STU_BT22B005",
-              qrCode: "STU_BT22B005|APPLE-MACBOOK-20240102|CSE",
-              status: "active",
-              createdAt: "2024-01-20",
-            },
-          ],
-        },
-      };
+      const [userResponse, deviceResponse] = await Promise.all([
+        listUsers(),
+        listDevices(),
+      ]);
 
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      const users = Array.isArray(userResponse) ? userResponse : userResponse.results || [];
+      const devices = Array.isArray(deviceResponse) ? deviceResponse : deviceResponse.results || [];
 
-      const studentData = mockStudents[studentId || ""];
-      if (!studentData) {
-        throw new Error("Student not found");
+      const employeeData = users.find((user: any) => String(user.id) === String(employeeId))
+        || users.find((user: any) => String(user.username) === String(employeeId))
+        || users.find((user: any) => String(user.email) === String(employeeId))
+        || (employeeId ? null : null);
+
+      if (!employeeData) {
+        throw new Error("Employee not found in the department records");
       }
 
-      setStudent(studentData);
+      const fullName = [employeeData.first_name, employeeData.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || employeeData.username || "Employee";
+
+      const departmentName = employeeData.dpt_name || employeeData.dpt_name || auth?.user?.name || "Department";
+
+      const registeredPCs = devices
+        .filter((device: any) => {
+          const ownerId = typeof device.owner === "object" ? device.owner?.id : device.owner;
+          return String(ownerId) === String(employeeData.id);
+        })
+        .map((device: any) => ({
+          id: device.id,
+          serialNumber: device.serial_number || device.asset_tag || "N/A",
+          model: device.model_name || "",
+          brand: device.brand || "",
+          purchaseDate: device.created_at || "",
+          qrCode: device.qr_token ? String(device.qr_token) : undefined,
+          qrImage: device.qr_image ? normalizeImageUrl(device.qr_image) : undefined,
+          status: (device.status || "ACTIVE").toLowerCase() === "stolen"
+            ? "blocked"
+            : (device.status || "ACTIVE").toLowerCase() === "decommissioned"
+              ? "replaced"
+              : "active",
+          createdAt: device.created_at || new Date().toISOString(),
+        }));
+
+      setEmployee({
+        id: employeeData.id,
+        rollNumber: employeeData.username || employeeData.email || "N/A",
+        name: fullName,
+        email: employeeData.email || "",
+        phone: employeeData.phone || "",
+        departmentId: employeeData.dpt || employeeData.dpt_name || auth?.user.code || "N/A",
+        photo: normalizeImageUrl(employeeData.profile_image),
+        username: employeeData.username || "",
+        role: employeeData.role || "EMPLOYEE",
+        departmentName,
+        registeredPCs,
+      });
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to load student details";
+      const errorMessage = err instanceof Error ? err.message : "Failed to load employee details";
+      console.error("Failed to load employee details", err);
+
+      if (errorMessage.toLowerCase().includes("auth") || errorMessage.toLowerCase().includes("credentials") || errorMessage.toLowerCase().includes("unauthorized")) {
+        clearAuth("department");
+        toast.error("Your session expired. Please log in again.");
+        navigate("/dept/login");
+        return;
+      }
+
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -173,14 +145,13 @@ export default function DepartmentStudentView() {
   };
 
   const handleDeletePC = (pcId: string) => {
-    if (!student) return;
+    if (!employee) return;
 
-    // Simulated delete - in production this would call an API
-    const updatedStudent = {
-      ...student,
-      registeredPCs: student.registeredPCs.filter((pc) => pc.id !== pcId),
+    const updatedEmployee = {
+      ...employee,
+      registeredPCs: employee.registeredPCs.filter((pc) => pc.id !== pcId),
     };
-    setStudent(updatedStudent);
+    setEmployee(updatedEmployee);
     toast.success("PC removed successfully");
   };
 
@@ -194,21 +165,21 @@ export default function DepartmentStudentView() {
   if (isLoading) {
     return (
       <PortalLayout
-        title="Student Details"
+        title="Employee Details"
         onLogout={handleLogout}
         showLogout={true}
       >
         <div className="flex items-center justify-center py-12">
-          <p className="text-muted-foreground">Loading student details...</p>
+          <p className="text-muted-foreground">Loading employee details...</p>
         </div>
       </PortalLayout>
     );
   }
 
-  if (error || !student) {
+  if (error || !employee) {
     return (
       <PortalLayout
-        title="Student Details"
+        title="Employee Details"
         onLogout={handleLogout}
         showLogout={true}
       >
@@ -224,7 +195,7 @@ export default function DepartmentStudentView() {
 
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error || "Student not found"}</AlertDescription>
+            <AlertDescription>{error || "Employee not found"}</AlertDescription>
           </Alert>
         </div>
       </PortalLayout>
@@ -233,7 +204,7 @@ export default function DepartmentStudentView() {
 
   return (
     <PortalLayout
-      title="Student Details"
+      title="Employee Details"
       onLogout={handleLogout}
       showLogout={true}
     >
@@ -247,32 +218,59 @@ export default function DepartmentStudentView() {
           Back to Dashboard
         </Button>
 
-        {/* Student Information Card */}
+        {/* Employee Information Card */}
         <Card className="p-8 bg-gradient-to-r from-secondary/10 to-accent/10 border-2">
-          <div className="flex items-start gap-6">
-            <img
-              src={student.photo}
-              alt={student.name}
-              className="w-20 h-20 rounded-lg"
-            />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden p-1 bg-gradient-to-br from-primary via-secondary to-accent shadow-lg shadow-primary/25 flex-shrink-0">
+              {employee.photo ? (
+                <img
+                  src={normalizeImageUrl(employee.photo)}
+                  alt={employee.name}
+                  className="w-full h-full rounded-xl object-cover bg-background"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = "none";
+                  }}
+                />
+              ) : (
+                <div className="w-full h-full rounded-xl bg-background flex items-center justify-center text-primary font-bold text-lg uppercase">
+                  {employee.name
+                    ? employee.name
+                        .split(" ")
+                        .map((n: string) => n[0])
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .join("")
+                    : "EM"}
+                </div>
+              )}
+            </div>
+
             <div className="flex-1">
-              <h2 className="text-3xl font-bold mb-2">{student.name}</h2>
+              <h2 className="text-3xl font-bold mb-2">{employee.name}</h2>
               <div className="grid sm:grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-muted-foreground">Roll Number</p>
-                  <p className="font-mono font-semibold">{student.rollNumber}</p>
+                  <p className="text-muted-foreground">Employee ID</p>
+                  <p className="font-mono font-semibold">{employee.rollNumber}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Username</p>
+                  <p className="font-semibold">{employee.username}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Email</p>
-                  <p className="text-sm break-all">{student.email}</p>
+                  <p className="text-sm break-all">{employee.email}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Phone</p>
-                  <p className="font-semibold">{student.phone}</p>
+                  <p className="font-semibold">{employee.phone}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Department</p>
-                  <p className="font-semibold">{student.departmentId}</p>
+                  <p className="font-semibold">{employee.departmentName}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Role</p>
+                  <p className="font-semibold">{employee.role}</p>
                 </div>
               </div>
             </div>
@@ -285,7 +283,7 @@ export default function DepartmentStudentView() {
             <div className="flex items-center gap-3">
               <Laptop className="w-6 h-6 text-primary" />
               <h3 className="text-2xl font-bold">
-                Registered PCs ({student.registeredPCs.length})
+                Registered PCs ({employee.registeredPCs.length})
               </h3>
             </div>
             <Button
@@ -296,7 +294,7 @@ export default function DepartmentStudentView() {
             </Button>
           </div>
 
-          {student.registeredPCs.length === 0 ? (
+          {employee.registeredPCs.length === 0 ? (
             <Card className="p-8 text-center border-2 border-dashed">
               <Laptop className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
               <p className="text-muted-foreground mb-4">No registered PCs</p>
@@ -309,7 +307,7 @@ export default function DepartmentStudentView() {
             </Card>
           ) : (
             <div className="space-y-4">
-              {student.registeredPCs.map((pc) => (
+              {employee.registeredPCs.map((pc) => (
                 <Card key={pc.id} className="p-6 hover:shadow-md transition-shadow border-2">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
@@ -349,6 +347,17 @@ export default function DepartmentStudentView() {
                           <p className="font-semibold">
                             {new Date(pc.createdAt).toLocaleDateString()}
                           </p>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <p className="text-muted-foreground text-xs mb-2 font-bold uppercase tracking-wider">Device QR Code</p>
+                          <div className="inline-block p-3 rounded-2xl border-2 border-primary/20 bg-white shadow-sm">
+                            <QRCodeSVG
+                              value={pc.qrCode || pc.serialNumber}
+                              size={128}
+                              level="H"
+                              includeMargin={false}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>

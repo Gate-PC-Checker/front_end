@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { PortalLayout } from "@/components/layout/PortalLayout";
 import { getAuth, clearAuth, Student } from "@/lib/auth";
+import { listUsers, createDevice, normalizeImageUrl } from "@/lib/backend";
 import { generateQRCode } from "@/lib/qr-generator";
 import {
   AlertCircle,
@@ -28,12 +29,15 @@ interface PCDetails {
 interface RegistrationData {
   student: Student | null;
   pc: PCDetails;
-  qrCode: { qrData: string; borderColor: string };
+  qrImage: string;
+  qrToken: string;
+  borderColor: string;
 }
 
 export default function DepartmentPCRegistration() {
   const navigate = useNavigate();
   const auth = getAuth("department");
+  const departmentId = auth?.user?.dptId || auth?.user?.id;
 
   const [step, setStep] = useState<RegistrationStep>("select-student");
   const [students, setStudents] = useState<Student[]>([]);
@@ -65,56 +69,18 @@ export default function DepartmentPCRegistration() {
   const loadStudents = async () => {
     setIsLoadingStudents(true);
     try {
-      // Simulated student list
-      const mockStudents: Student[] = [
-        {
-          id: "STU_BT22B001",
-          rollNumber: "BT22B001",
-          name: "Abeba Tadesse",
-          email: "bt22b001@student.edu",
-          phone: "+251911234567",
-          departmentId: "CSE",
-          photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=abeba",
-        },
-        {
-          id: "STU_BT22B002",
-          rollNumber: "BT22B002",
-          name: "Almaz Kebede",
-          email: "bt22b002@student.edu",
-          phone: "+251922345678",
-          departmentId: "CSE",
-          photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=almaz",
-        },
-        {
-          id: "STU_BT22B003",
-          rollNumber: "BT22B003",
-          name: "Yohannes Desai",
-          email: "bt22b003@student.edu",
-          phone: "+251933456789",
-          departmentId: "CSE",
-          photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=yohannes",
-        },
-        {
-          id: "STU_BT22B004",
-          rollNumber: "BT22B004",
-          name: "Selam Haile",
-          email: "bt22b004@student.edu",
-          phone: "+251944567890",
-          departmentId: "CSE",
-          photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=selam",
-        },
-        {
-          id: "STU_BT22B005",
-          rollNumber: "BT22B005",
-          name: "Tewodros Bekele",
-          email: "bt22b005@student.edu",
-          phone: "+251955678901",
-          departmentId: "CSE",
-          photo: "https://api.dicebear.com/7.x/avataaars/svg?seed=tewodros",
-        },
-      ];
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      setStudents(mockStudents);
+      const response = await listUsers();
+      const users = Array.isArray(response) ? response : response.results || [];
+      const mappedUsers: Student[] = users.map((user: any) => ({
+        id: user.id,
+        rollNumber: user.username || user.email || "N/A",
+        name: `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.username,
+        email: user.email || "",
+        phone: user.phone || "",
+        departmentId: auth?.user.code || user.dpt || "",
+        photo: normalizeImageUrl(user.profile_image),
+      }));
+      setStudents(mappedUsers);
     } catch (err) {
       setGeneralError("Failed to load students");
     } finally {
@@ -154,34 +120,25 @@ export default function DepartmentPCRegistration() {
         throw new Error("Please fill in all PC details");
       }
 
-      // Simulate serial number validation via API
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      const createdDevice: any = await createDevice({
+        asset_tag: pcDetails.serialNumber,
+        brand: pcDetails.brand,
+        model_name: pcDetails.model,
+        serial_number: pcDetails.serialNumber,
+        owner: selectedStudent?.id,
+        dpt: departmentId || undefined,
+      });
 
-      // Mock validation - in production this would check a database
-      const registeredSerials = [
-        "DELL-XPS-20240101",
-        "HP-PAVILION-20240102",
-        "LENOVO-IDEAPAD-20240103",
-      ];
-
-      if (registeredSerials.includes(pcDetails.serialNumber)) {
-        throw new Error(
-          `Serial number "${pcDetails.serialNumber}" is already registered. Please verify the serial number.`
-        );
-      }
-
-      // Serial is valid, generate QR code
       if (selectedStudent) {
-        const qrCode = generateQRCode(
-          selectedStudent.id,
-          pcDetails.serialNumber,
-          auth.user.code
-        );
+        const qrToken = createdDevice?.qr_token || pcDetails.serialNumber;
+        const qrImage = createdDevice?.qr_image || `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrToken)}`;
 
         setRegistrationData({
           student: selectedStudent,
           pc: pcDetails,
-          qrCode,
+          qrImage,
+          qrToken,
+          borderColor: "#2563eb",
         });
 
         setStep("success");
@@ -217,14 +174,14 @@ export default function DepartmentPCRegistration() {
         {/* Step 1: Select Student */}
         {step === "select-student" && (
           <Card className="p-8">
-            <h2 className="text-2xl font-bold mb-6">Step 1: Select Student</h2>
+            <h2 className="text-2xl font-bold mb-6">Step 1: Select Employee</h2>
             <p className="text-muted-foreground mb-6">
-              Choose a student to register their PC
+              Choose an employee to register their PC
             </p>
 
             <div className="mb-6">
               <Input
-                placeholder="Search by name or roll number..."
+                placeholder="Search by name or ID number..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="rounded-lg"
@@ -234,13 +191,13 @@ export default function DepartmentPCRegistration() {
             {isLoadingStudents ? (
               <div className="text-center py-12">
                 <Loader className="w-8 h-8 animate-spin mx-auto text-primary" />
-                <p className="text-muted-foreground mt-4">Loading students...</p>
+                <p className="text-muted-foreground mt-4">Loading employees...</p>
               </div>
             ) : (
               <div className="grid gap-3">
                 {filteredStudents.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">
-                    No students found
+                    No employees found
                   </p>
                 ) : (
                   filteredStudents.map((student) => (
@@ -251,11 +208,27 @@ export default function DepartmentPCRegistration() {
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                          <img
-                            src={student.photo}
-                            alt={student.name}
-                            className="w-10 h-10 rounded-full"
-                          />
+                          {student.photo ? (
+                            <img
+                              src={normalizeImageUrl(student.photo)}
+                              alt={student.name}
+                              className="w-10 h-10 rounded-xl object-cover border border-border"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = "none";
+                              }}
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase">
+                              {student.name
+                                ? student.name
+                                    .split(" ")
+                                    .map((n: string) => n[0])
+                                    .filter(Boolean)
+                                    .slice(0, 2)
+                                    .join("")
+                                : "EM"}
+                            </div>
+                          )}
                           <div>
                             <p className="font-bold">{student.name}</p>
                             <p className="text-sm text-muted-foreground">
@@ -291,13 +264,29 @@ export default function DepartmentPCRegistration() {
 
             <h2 className="text-2xl font-bold mb-2">Step 2: Enter PC Details</h2>
             <div className="mb-6 p-4 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground">Student:</p>
+              <p className="text-sm text-muted-foreground">Employee:</p>
               <div className="flex items-center gap-3 mt-2">
-                <img
-                  src={selectedStudent.photo}
-                  alt={selectedStudent.name}
-                  className="w-8 h-8 rounded-full"
-                />
+                {selectedStudent.photo ? (
+                  <img
+                    src={normalizeImageUrl(selectedStudent.photo)}
+                    alt={selectedStudent.name}
+                    className="w-10 h-10 rounded-xl object-cover border border-border"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = "none";
+                    }}
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase">
+                    {selectedStudent.name
+                      ? selectedStudent.name
+                          .split(" ")
+                          .map((n: string) => n[0])
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .join("")
+                      : "EM"}
+                  </div>
+                )}
                 <div>
                   <p className="font-bold">{selectedStudent.name}</p>
                   <p className="text-xs text-muted-foreground">
@@ -408,7 +397,7 @@ export default function DepartmentPCRegistration() {
               <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
               <h2 className="text-2xl font-bold">PC Successfully Registered!</h2>
               <p className="text-muted-foreground mt-2">
-                QR code has been generated. Print and attach it to the device.
+                QR code has been generated and is ready to print and attach to the device.
               </p>
             </div>
 
@@ -420,11 +409,27 @@ export default function DepartmentPCRegistration() {
                     STUDENT
                   </p>
                   <div className="flex items-center gap-3">
-                    <img
-                      src={registrationData.student.photo}
-                      alt={registrationData.student.name}
-                      className="w-10 h-10 rounded-full"
-                    />
+                    {registrationData.student.photo ? (
+                      <img
+                        src={normalizeImageUrl(registrationData.student.photo)}
+                        alt={registrationData.student.name}
+                        className="w-10 h-10 rounded-xl object-cover border border-border"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = "none";
+                        }}
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase">
+                        {registrationData.student.name
+                          ? registrationData.student.name
+                              .split(" ")
+                              .map((n: string) => n[0])
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .join("")
+                          : "EM"}
+                      </div>
+                    )}
                     <div>
                       <p className="font-bold">{registrationData.student.name}</p>
                       <p className="text-sm text-muted-foreground">
@@ -465,22 +470,23 @@ export default function DepartmentPCRegistration() {
               {/* QR Code */}
               <div className="flex flex-col items-center justify-center">
                 <div
-                  className="aspect-square bg-white rounded-lg p-6 flex items-center justify-center mb-4"
+                  className="bg-white rounded-xl p-4 flex items-center justify-center mb-3 shadow-md border-4"
                   style={{
-                    border: `4px solid ${registrationData.qrCode.borderColor}`,
-                    boxShadow: `0 0 20px ${registrationData.qrCode.borderColor}40`,
+                    borderColor: registrationData.borderColor,
+                    boxShadow: `0 0 20px ${registrationData.borderColor}40`,
                   }}
                 >
-                  <div className="text-center">
-                    <p className="text-xs text-gray-600 font-mono break-all">
-                      {registrationData.qrCode.qrData}
-                    </p>
-                  </div>
+                  <img
+                    src={registrationData.qrImage}
+                    alt={`QR code for ${registrationData.pc.serialNumber}`}
+                    className="w-52 h-52 object-contain rounded"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(registrationData.qrToken)}`;
+                    }}
+                  />
                 </div>
-                <p className="text-xs text-muted-foreground text-center mb-4">
-                  Monthly Color Code: <span style={{ color: registrationData.qrCode.borderColor }}>
-                    ■
-                  </span>
+                <p className="text-xs text-muted-foreground text-center font-mono mb-4">
+                  Token: {registrationData.qrToken}
                 </p>
               </div>
             </div>
@@ -488,12 +494,23 @@ export default function DepartmentPCRegistration() {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-blue-900">
                 <strong>Next Steps:</strong> Print this QR code on a durable vinyl sticker with the
-                campus logo and attach it to the device. Send SMS confirmation to the student.
+                campus logo and attach it to the device. Send SMS confirmation to the employee.
               </p>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4">
-              <Button variant="outline" className="gap-2 rounded-lg" size="lg">
+              <Button
+                variant="outline"
+                className="gap-2 rounded-lg"
+                size="lg"
+                onClick={() => {
+                  const link = document.createElement("a");
+                  link.href = registrationData.qrImage;
+                  link.download = `QR_${registrationData.pc.serialNumber}.png`;
+                  link.target = "_blank";
+                  link.click();
+                }}
+              >
                 <Download className="w-4 h-4" />
                 Download QR
               </Button>

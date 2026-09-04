@@ -26,7 +26,9 @@ export interface PC {
   purchaseDate: string;
   studentId: string;
   qrCode: string;
+  qrImage?: string;
   status: "active" | "blocked" | "replaced";
+  rawStatus?: string;
   createdAt: string;
 }
 
